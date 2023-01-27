@@ -1,11 +1,11 @@
 import unittest
 from jinja2 import Environment
 from jinja2.exceptions import UndefinedError
-from script import FunctionExtension, NoModuleNameDefined, CompileError
+from jinja_script_block import ScriptBlockExtension, NoModuleNameDefined, CompileError
 
 class ExtensionUnitTest(unittest.TestCase):
   def setUp(self):
-    self.env = Environment(extensions=[FunctionExtension])
+    self.env = Environment(extensions=[ScriptBlockExtension])
   def test_fail_when_no_module_is_defiend(self):
     with self.assertRaises(NoModuleNameDefined):
       self.env.from_string("""
@@ -14,10 +14,11 @@ class ExtensionUnitTest(unittest.TestCase):
       {% endscript %}
       """)
   def test_fail_when_compiled_error(self):
-    with self.assertRaises(CompileError):
+    with self.assertRaises(NameError):
       self.env.from_string('''
       {%-script test%}
       import re
+      x = x
       {%-endscript-%}
       ''')
   def test_compile_success(self):
@@ -40,10 +41,10 @@ def test1(): return None
       temlate.render()
   def test_success_when_calling(self):
     template = self.env.from_string('''
-{%-script test -%}
-import re
-def test1(): return None
-{%-endscript-%}
+  {%-script test %}
+  import re
+  def test1(): return None
+  {%-endscript-%}
 {{test.test1()}}
     ''')
     self.assertEqual(template.render().strip(), "None")
@@ -106,12 +107,12 @@ def set_x(value):
   def test_variable_set_at_render(self):
     template = self.env.from_string('''
 {%script test%}
-x = 3
-y = 4
-def set_x(value):
-  global x
-  x = value
-  return ''
+  x = 3
+  y = 4
+  def set_x(value):
+    global x
+    x = value
+    return ''
 {% endscript %}
 {{test.set_x(x)}}{{test.x}}
     ''')
@@ -144,7 +145,6 @@ class MyModule:
 {{container}}
     ''')
     rendered = template.render().strip()
-    print(rendered)
     self.assertEqual(rendered, '[3]')
 
 

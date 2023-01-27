@@ -18,3 +18,18 @@ To use compiled block, do it as following:
 {{module.function_with_arguments(1)}}
 {{module.function_with_arguments_at_render(x)}}
 ```
+
+## How to use
+```python3
+from jinja_script_block import ScriptBlockExtension
+from jinja2 import Environment
+
+env = Environment(extensions=[ScriptBlockExtension])
+
+env.from_string('''
+{% script mymodule %}
+class MyClass:
+  containers = []
+{% endscript%}
+''')
+```
