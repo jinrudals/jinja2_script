@@ -5,7 +5,8 @@ from jinja2 import Environment
 from types import FunctionType, ModuleType
 import re
 
-_pattern = re.compile('(\s*).*')
+
+_pattern = re.compile('\n(\s*)\w')
 class NoInternalJinjaAccepted(Exception):
   def __init__(self):
     pass
@@ -36,10 +37,13 @@ class ScriptBlockExtension(Extension):
         raise NoInternalJinjaAccepted()
 
       try:
-        data = [each for each in data[0].nodes[0].data.split('\n') if each.strip() != '']
-        matched = _pattern.match(data[0]).group(1)
-        data = '\n'.join([each.replace(matched, '',1) for each in data])
-        data = compile(data, "<string>", "exec")
+        lines = data[0].nodes[0].data
+        if not lines.startswith('\n'):
+          lines = '\n' + lines
+        target = len(_pattern.findall(lines)[0])
+        pattern = re.compile(r'\n\s{}'.format("{" + f'0,{target}' + "}"))
+        lines = pattern.sub('\n', lines)
+        data = compile(lines, "<string>", "exec")
       except:
         raise CompileError()
       mod = ModuleType(name)

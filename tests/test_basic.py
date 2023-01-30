@@ -16,7 +16,7 @@ class ExtensionUnitTest(unittest.TestCase):
   def test_fail_when_compiled_error(self):
     with self.assertRaises(NameError):
       self.env.from_string('''
-      {%-script test%}
+      {%-script test%}  
       import re
       x = x
       {%-endscript-%}

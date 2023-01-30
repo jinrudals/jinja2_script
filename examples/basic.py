@@ -4,7 +4,7 @@ from jinja2 import Environment
 env = Environment(extensions=[ScriptBlockExtension])
 
 template = env.from_string('''
-  {%- script myblock %}
+  {%- script myblock %}   
   containers = []
   value = 333
   {% endscript -%}
@@ -12,6 +12,9 @@ template = env.from_string('''
   {%- script myblock2 %}
   def add(obj):
     obj.append(3)
+  def function(value):
+    if value == "xx":
+      return ''
   {% endscript -%}
 
 {%- set _=myblock.containers.append('1') -%}

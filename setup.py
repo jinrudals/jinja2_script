@@ -6,7 +6,7 @@ long_description = (this_directory / "README.md").read_text()
 
 setup(
     name="jinja-script-block",
-    version="0.0.3",
+    version="0.0.4",
     author="Benjamin Jin",
     author_email="jinrudals135@naver.com",
     license="BSD",
