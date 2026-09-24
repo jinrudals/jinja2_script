@@ -1,5 +1,9 @@
-**/__pycache__/*
-script/**/
-dist/**
-**/*.egg-info
+__pycache__/
+*.py[cod]
+*.egg-info/
+script/
+dist/
+build/
+.venv/
+.ruff_cache/
 .worktrees/

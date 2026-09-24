@@ -1,4 +1,5 @@
 """Source-aware errors, including the original public exception names."""
+
 from jinja2 import TemplateSyntaxError
 
 

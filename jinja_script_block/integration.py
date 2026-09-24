@@ -1,8 +1,9 @@
 """Observe script execution while Jinja constructs imported template modules."""
+
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from collections.abc import Iterator
 
 
 @dataclass
@@ -10,7 +11,9 @@ class ModuleExecution:
     used_script: bool = False
 
 
-_active: ContextVar[tuple[ModuleExecution, ...]] = ContextVar('jinja_script_modules', default=())
+_active: ContextVar[tuple[ModuleExecution, ...]] = ContextVar(
+    "jinja_script_modules", default=()
+)
 
 
 @contextmanager
@@ -39,7 +42,7 @@ class ScriptTemplateMixin:
 
     def _get_default_module(self, ctx=None):
         if self.environment.is_async:
-            raise RuntimeError('Module is not available in async mode.')
+            raise RuntimeError("Module is not available in async mode.")
         if ctx is not None:
             keys = ctx.globals_keys - self.globals.keys()
             if keys:
@@ -56,7 +59,9 @@ class ScriptTemplateMixin:
         if ctx is not None:
             keys = ctx.globals_keys - self.globals.keys()
             if keys:
-                return await self.make_module_async({key: ctx.parent[key] for key in keys})
+                return await self.make_module_async(
+                    {key: ctx.parent[key] for key in keys}
+                )
         if self._module is not None:
             return self._module
         with observe_module_execution() as observation:
@@ -70,6 +75,7 @@ def install_template_integration(environment) -> None:
     """Compose per environment, preserving custom public Template methods."""
     if not issubclass(environment.template_class, ScriptTemplateMixin):
         environment.template_class = type(
-            'ScriptTemplate', (ScriptTemplateMixin, environment.template_class),
-            {'__module__': __name__},
+            "ScriptTemplate",
+            (ScriptTemplateMixin, environment.template_class),
+            {"__module__": __name__},
         )
