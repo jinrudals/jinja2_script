@@ -13,14 +13,15 @@ class ExtensionUnitTest(unittest.TestCase):
       test
       {% endscript %}
       """)
-  def test_fail_when_compiled_error(self):
-    with self.assertRaises(NameError):
-      self.env.from_string('''
-      {%-script test%}  
+  def test_fail_when_execution_error(self):
+    template = self.env.from_string("""
+      {%-script test%}
       import re
       x = x
       {%-endscript-%}
-      ''')
+      """)
+    with self.assertRaises(NameError):
+      template.render()
   def test_compile_success(self):
       self.env.from_string('''
       {%-script test -%}

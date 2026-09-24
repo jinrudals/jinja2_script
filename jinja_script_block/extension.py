@@ -1,11 +1,11 @@
 """Jinja parsing and namespace binding for Python script blocks."""
 import hashlib
 import keyword
-from types import ModuleType
 
 from jinja2 import nodes, TemplateSyntaxError
 from jinja2.ext import Extension
 
+from .runtime import compile_script, execute_script
 from .errors import CompileError
 from .source import decode_script, prepare_python, rewrite_script_blocks
 
@@ -33,13 +33,21 @@ class ScriptBlockExtension(Extension):
         source = prepare_python(body, first_lineno)
         filename = parser.filename or parser.name or f'<script:{hashlib.sha256(source.encode()).hexdigest()[:12]}>'
         try:
-            code = compile(source, filename, 'exec')
+            compile_script(source, filename)
         except SyntaxError as error:
             raise CompileError(error.msg, error.lineno or lineno, parser.name, parser.filename) from error
-        module = ModuleType(name)
-        exec(code, module.__dict__)
-        self.environment.globals[name] = module
-        return nodes.Scope([]).set_lineno(lineno)
+        assignment = nodes.Assign(
+            nodes.Name(name, 'store'),
+            self.call_method('_execute', [
+                nodes.DerivedContextReference(), nodes.Const(name),
+                nodes.Const(source), nodes.Const(filename),
+            ]),
+        ).set_lineno(lineno)
+        # Make Jinja construct loop metadata even when only Python uses it.
+        return [nodes.ExprStmt(nodes.Name('loop', 'load')).set_lineno(lineno), assignment]
+
+    def _execute(self, context, name, source, filename):
+        return execute_script(context, name, source, filename)
 
 
 # Preserve the original extension identifier in generated templates.
