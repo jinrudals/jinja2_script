@@ -5,6 +5,7 @@ import keyword
 from jinja2 import nodes, TemplateSyntaxError
 from jinja2.ext import Extension
 
+from .integration import install_template_integration
 from .runtime import compile_script, execute_script
 from .errors import CompileError
 from .source import decode_script, prepare_python, rewrite_script_blocks
@@ -13,6 +14,10 @@ from .source import decode_script, prepare_python, rewrite_script_blocks
 class ScriptBlockExtension(Extension):
     """Define an explicitly named Python namespace inside a template."""
     tags = {'script'}
+
+    def __init__(self, environment):
+        super().__init__(environment)
+        install_template_integration(environment)
 
     def preprocess(self, source, name, filename=None):
         return rewrite_script_blocks(source, self.environment, name, filename)
