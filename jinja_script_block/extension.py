@@ -9,7 +9,12 @@ from jinja2.ext import Extension
 from .errors import CompileError
 from .integration import install_template_integration
 from .runtime import compile_script, execute_script
-from .source import decode_script, prepare_python, rewrite_script_blocks
+from .source import (
+    decode_script,
+    prepare_python,
+    referenced_context_names,
+    rewrite_script_blocks,
+)
 
 
 class ScriptBlockExtension(Extension):
@@ -27,7 +32,12 @@ class ScriptBlockExtension(Extension):
     def parse(self, parser):
         lineno = next(parser.stream).lineno
         name = parser.stream.expect("name").value
-        if not name.isidentifier() or keyword.iskeyword(name) or name.startswith("_"):
+        if (
+            not name.isidentifier()
+            or keyword.iskeyword(name)
+            or name.startswith("_")
+            or name in {"true", "false", "none"}
+        ):
             raise TemplateSyntaxError(
                 "Invalid public script namespace: " + name,
                 lineno,
@@ -59,6 +69,7 @@ class ScriptBlockExtension(Extension):
             raise CompileError(
                 error.msg, error.lineno or lineno, parser.name, parser.filename
             ) from error
+        context_names = referenced_context_names(source, filename)
         assignment = nodes.Assign(
             nodes.Name(name, "store"),
             self.call_method(
@@ -68,17 +79,22 @@ class ScriptBlockExtension(Extension):
                     nodes.Const(name),
                     nodes.Const(source),
                     nodes.Const(filename),
+                    nodes.Const(context_names),
                 ],
             ),
         ).set_lineno(lineno)
-        # Make Jinja construct loop metadata even when only Python uses it.
+        # Make compiler-created context bindings visible even when Python
+        # is their only consumer. Do not activate unused macro parameters.
         return [
-            nodes.ExprStmt(nodes.Name("loop", "load")).set_lineno(lineno),
+            *(
+                nodes.ExprStmt(nodes.Name(key, "load")).set_lineno(lineno)
+                for key in context_names
+            ),
             assignment,
         ]
 
-    def _execute(self, context, name, source, filename):
-        return execute_script(context, name, source, filename)
+    def _execute(self, context, name, source, filename, context_names):
+        return execute_script(context, name, source, filename, context_names)
 
 
 # Preserve the original extension identifier in generated templates.

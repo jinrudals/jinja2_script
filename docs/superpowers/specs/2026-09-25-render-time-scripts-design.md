@@ -1,6 +1,6 @@
 # Render-time scripts and reusable template helpers
 
-Status: proposed design for user review; implementation is not yet authorized by this document.
+Status: approved by the user; implemented on `refactor/render-time-scripts`. See the implementation report for verification and review refinements.
 
 ## Intent and agreed direction
 

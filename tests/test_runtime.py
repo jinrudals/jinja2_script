@@ -121,3 +121,54 @@ class RuntimeTests(unittest.TestCase):
             with self.assertRaises(ZeroDivisionError):
                 t.render(divisor=0)
         self.assertEqual(t.render(divisor=2), "5.0")
+
+    def test_python_only_super_binding(self):
+        env = Environment(
+            loader=DictLoader(
+                {
+                    "base": "{% block body %}base{% endblock %}",
+                    "child": '{% extends "base" %}{% block body %}{% script s %}\nvalue=super()\n{% endscript %}{{ s.value }}{% endblock %}',
+                }
+            ),
+            extensions=[ScriptBlockExtension],
+        )
+        self.assertEqual(env.get_template("child").render(), "base")
+
+    def test_python_only_self_binding(self):
+        t = self.env.from_string(
+            "{% block body %}body{% endblock %}{% script s %}\nvalue=self['body']()\n{% endscript %}{{ s.value }}"
+        )
+        self.assertEqual(t.render(), "bodybody")
+
+    def test_python_only_caller_binding(self):
+        t = self.env.from_string(
+            "{% macro wrap() %}{% script s %}\nvalue=caller()\n{% endscript %}{{ s.value }}{% endmacro %}{% call wrap() %}content{% endcall %}"
+        )
+        self.assertEqual(t.render(), "content")
+
+    def test_python_only_macro_kwargs_and_varargs(self):
+        t = self.env.from_string(
+            '{% macro wrap() %}{% script s %}\nvalue=kwargs["extra"]+sum(varargs)\n{% endscript %}{{ s.value }}{% endmacro %}{{ wrap(2,3,extra=4) }}'
+        )
+        self.assertEqual(t.render(), "9")
+
+    def test_python_class_super_remains_builtin(self):
+        t = self.env.from_string(
+            "{% script s %}\nclass Base:\n    def value(self):\n        return 4\nclass Child(Base):\n    def value(self):\n        return super().value()+1\nresult=Child().value()\n{% endscript %}{{ s.result }}"
+        )
+        self.assertEqual(t.render(), "5")
+
+    def test_python_class_super_inside_inherited_block(self):
+        body = "{% script s %}\nclass Base:\n    def value(self):\n        return 4\nclass Child(Base):\n    def value(self):\n        return super().value()+1\nresult=Child().value()\n{% endscript %}{{ s.result }}"
+        env = Environment(
+            loader=DictLoader(
+                {
+                    "base": "{% block body %}base{% endblock %}",
+                    "child": '{% extends "base" %}{% block body %}{{ super() }}'
+                    + body
+                    + "{% endblock %}",
+                }
+            ),
+            extensions=[ScriptBlockExtension],
+        )
+        self.assertEqual(env.get_template("child").render(), "base5")

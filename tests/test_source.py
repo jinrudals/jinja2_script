@@ -148,3 +148,26 @@ class SourceTests(unittest.TestCase):
                 "{% script a %}\nx=1\n{% endscript %}\n{% nonexistent %}"
             )
         self.assertEqual(raised.exception.lineno, 4)
+
+    def test_line_comments_do_not_declare_scripts(self):
+        env = Environment(extensions=[ScriptBlockExtension], line_comment_prefix="##")
+        for source, expected in [
+            ("## {% script fake %}\nOK", "\nOK"),
+            ("text ## {% script fake %}\nOK", "text\nOK"),
+        ]:
+            with self.subTest(source=source):
+                self.assertEqual(env.from_string(source).render(), expected)
+
+    def test_line_statements_preserve_quoted_script_text(self):
+        env = Environment(extensions=[ScriptBlockExtension], line_statement_prefix="#")
+        for source in [
+            '# set x = "{% script fake %}"\n{{ x }}',
+            '# set x = (\n "{% script fake %}"\n)\n{{ x }}',
+        ]:
+            with self.subTest(source=source):
+                self.assertEqual(env.from_string(source).render(), "{% script fake %}")
+
+    def test_jinja_literal_namespace_names_are_rejected(self):
+        for name in ["true", "false", "none"]:
+            with self.subTest(name=name), self.assertRaises(TemplateSyntaxError):
+                self.env.from_string("{% script " + name + " %}\nx=1\n{% endscript %}")

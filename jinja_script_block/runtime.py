@@ -15,11 +15,17 @@ def compile_script(source: str, filename: str) -> CodeType:
 
 
 def execute_script(
-    context: Context, name: str, source: str, filename: str
+    context: Context,
+    name: str,
+    source: str,
+    filename: str,
+    context_names: tuple[str, ...],
 ) -> ModuleType:
     mark_script_execution()
     module = ModuleType(name)
     module.__dict__.update(context.get_all())
+    if "super" not in context_names:
+        module.__dict__.pop("super", None)
     module.__dict__["__name__"] = name
     module.__dict__["__file__"] = filename
     module.__dict__["__builtins__"] = builtins.__dict__

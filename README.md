@@ -44,7 +44,7 @@ def currency(value):
 {{ formatting.currency("12.5") }}
 ```
 
-Each script declares one public Python identifier. Names starting with `_` and Python keywords are rejected. A name may be declared only once per source template, including declarations in different branches, macros, or blocks. Different templates may use the same name.
+Each script declares one public Python identifier. Names starting with `_`, Python keywords, and Jinja literals (`true`, `false`, `none`) are rejected. A name may be declared only once per source template, including declarations in different branches, macros, or blocks. Different templates may use the same name.
 
 Scripts support normal Python functions, classes, imports, and variables. Empty and comment-only scripts are valid. Common indentation is removed; relative Python indentation is preserved. Python strings may contain Jinja delimiters, but a literal `{% endscript %}` terminates the block even inside a Python string. Nested Jinja statements are not evaluated inside Python.
 
@@ -62,6 +62,8 @@ Scripts can read render inputs and visible local variables, including macro argu
   {{ row.label }}
 {% endfor %}
 ```
+
+Jinja special bindings referenced by Python are available in their normal scopes: `super()` inside inherited blocks, `caller()` in call-block macros, and macro `kwargs` / `varargs`. Python accesses template blocks with `self["body"]()`, because Jinja's template reference uses item access. Ordinary Python method `super()` keeps its builtin meaning; if one script also uses the Jinja `super()` helper, use `builtins.super()` explicitly in its Python classes.
 
 Python assignments change the script namespace, not Jinja's surrounding bindings. The context snapshot is shallow: mutating a list supplied by the caller still mutates that list. Imported Python modules retain Python's ordinary module caching and global state.
 
@@ -121,9 +123,11 @@ Each import execution creates fresh script state. Two independent imports of the
 
 Fresh renders, imports, and includes do not share extension-created mutable namespaces. Immutable compiled Python code is cached with a bounded lifetime. Objects supplied explicitly by the application and ordinary Python modules are outside this isolation guarantee.
 
-The extension composes an environment-local Template mixin. It observes module creation and bypasses Jinja's module cache only when creation executes scripts, including through nested imports. Ordinary macro-only modules retain caching. This also works when templates load from a bytecode cache and during async rendering of synchronous script code.
+The extension composes environment-local Template and code-generator mixins. Compiled template metadata records script declarations and literal template dependencies, including declarations and imports inside skipped branches. These libraries get fresh modules on every import; ordinary helper libraries with only known pure dependencies retain caching. Runtime observation also catches scripts executed indirectly during module construction.
 
-This integration depends on Jinja 3.1's `_get_default_module` and `_get_default_module_async` hooks; dependency bounds intentionally exclude Jinja 3.2 until tested. Environment overlays and custom public `Template.make_module` / `make_module_async` methods are supported. Custom overrides of those two private default-module hooks conflict with this integration. Configure the extension before loading templates.
+Templates with dynamic or unresolved dependencies conservatively bypass module caching, because their purity cannot be established. Literal dependency checks can load and compile referenced templates without executing them; skipped missing or invalid dependencies retain their normal error timing. This trades some initialization work for predictable script state. Metadata survives bytecode caches and precompiled ModuleLoader templates.
+
+This integration depends on Jinja 3.1's `_get_default_module`, `_get_default_module_async`, and `_from_namespace` hooks and composes with its code generator; dependency bounds intentionally exclude Jinja 3.2 until tested. Environment overlays, custom code generators calling their superclass, and custom public `Template.make_module` / `make_module_async` methods are supported. Custom overrides of the two private default-module hooks conflict with this integration. Configure the extension before loading templates.
 
 ## Errors and trusted code
 

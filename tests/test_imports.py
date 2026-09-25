@@ -131,3 +131,74 @@ class ImportTests(unittest.TestCase):
         t.render()
         t.render()
         self.assertEqual(ticks, [1])
+
+    def test_skipped_script_is_reconsidered_on_later_import(self):
+        for statement in [
+            '{% import "lib" as lib %}',
+            '{% include "lib" without context %}',
+        ]:
+            with self.subTest(statement=statement):
+                e = self.environment(
+                    {
+                        "lib": "{% if flag.enabled %}{% script state %}\nevents.append(1)\n{% endscript %}{% endif %}"
+                    }
+                )
+                flag = {"enabled": False}
+                events = []
+                e.globals.update(flag=flag, events=events)
+                t = e.from_string(statement)
+                t.render()
+                flag["enabled"] = True
+                t.render()
+                t.render()
+                self.assertEqual(events, [1, 1])
+
+    def test_skipped_transitive_import_is_reconsidered(self):
+        e = self.environment(
+            {
+                "wrapper": '{% if flag.enabled %}{% from "lib" import state %}{% endif %}{% macro ready() %}{{ state is defined }}{% endmacro %}',
+                "page": '{% from "wrapper" import ready %}{{ ready() }}',
+            }
+        )
+        flag = {"enabled": False}
+        e.globals["flag"] = flag
+        t = e.get_template("page")
+        self.assertEqual(t.render(), "False")
+        flag["enabled"] = True
+        self.assertEqual(t.render(), "True")
+
+    def test_pure_transitive_imports_keep_cache(self):
+        e = self.environment(
+            {
+                "pure": "{% macro f() %}ok{% endmacro %}",
+                "wrapper": '{% set _=ticks.append(1) %}{% from "pure" import f %}{% macro wrapper() %}{{ f() }}{% endmacro %}',
+            }
+        )
+        ticks = []
+        e.globals["ticks"] = ticks
+        t = e.from_string('{% from "wrapper" import wrapper %}{{ wrapper() }}')
+        self.assertEqual([t.render(), t.render()], ["ok", "ok"])
+        self.assertEqual(ticks, [1])
+
+    def test_skipped_missing_dependency_does_not_raise(self):
+        e = self.environment(
+            {
+                "wrapper": '{% if false %}{% import "missing" as m %}{% endif %}{% macro f() %}ok{% endmacro %}'
+            }
+        )
+        self.assertEqual(
+            e.from_string('{% from "wrapper" import f %}{{ f() }}').render(), "ok"
+        )
+
+    def test_skipped_dynamic_import_is_reconsidered(self):
+        e = self.environment(
+            {
+                "wrapper": "{% if flag.enabled %}{% from target import state %}{% endif %}{% macro ready() %}{{ state is defined }}{% endmacro %}"
+            }
+        )
+        flag = {"enabled": False}
+        e.globals.update(flag=flag, target="lib")
+        t = e.from_string('{% from "wrapper" import ready %}{{ ready() }}')
+        self.assertEqual(t.render(), "False")
+        flag["enabled"] = True
+        self.assertEqual(t.render(), "True")

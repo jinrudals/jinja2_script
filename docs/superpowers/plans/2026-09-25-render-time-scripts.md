@@ -1,6 +1,6 @@
 # Render-Time Scripts Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Refactor the extension into render-time Python scripting with named namespaces, predictable state lifetime, and reusable helpers through standard Jinja imports.
 
@@ -80,8 +80,8 @@ def install_template_integration(environment: Environment) -> None: ...
 
 The eventual implementation of these interfaces belongs in `integration.py`. ContextVar state contains execution records, never script namespaces. The Template mixin wraps the environment's existing Template class rather than modifying Jinja's global Template type. Bind no closures to a particular environment so overlays remain valid.
 
-- [ ] **1. Record the baseline and isolate the probe.** Run `python3 -m unittest discover -v`; record interpreter/Jinja versions and the 12-test result. Create the temporary prototype directory. Use a tiny prototype extension that emits `nodes.Assign` and marks script execution, without building the final raw-Python parser.
-- [ ] **2. Add executable unittest cases for module lifetime.** The prototype tag creates `ModuleType(name)` with `values = []`. The critical fixture is:
+- [x] **1. Record the baseline and isolate the probe.** Run `python3 -m unittest discover -v`; record interpreter/Jinja versions and the 12-test result. Create the temporary prototype directory. Use a tiny prototype extension that emits `nodes.Assign` and marks script execution, without building the final raw-Python parser.
+- [x] **2. Add executable unittest cases for module lifetime.** The prototype tag creates `ModuleType(name)` with `values = []`. The critical fixture is:
 
 ```python
 templates = {
@@ -102,8 +102,8 @@ templates = {
 ```
 
 Add a second import of `lib` under another alias in one render, direct and dynamic imports (`{% import target as lib %}`), and an include without context. For the include, inject a caller-owned counter through environment globals and assert it increments on both executions, instead of merely asserting identical text.
-- [ ] **3. Run the probe against stock cached-module behavior.** Run `python -m unittest discover -s /tmp/jinja-script-import-probe -v`; freshness cases must fail while the pure-module cache control passes. Capture actual failures, not inferred ones.
-- [ ] **4. Implement the candidate in the probe.** Use a `ContextVar` holding a tuple of observation records. `mark_script_execution()` sets every active record's `used_script` flag. A new observation uses `token = variable.set(previous + (record,))` and always resets it in `finally`.
+- [x] **3. Run the probe against stock cached-module behavior.** Run `python -m unittest discover -s /tmp/jinja-script-import-probe -v`; freshness cases must fail while the pure-module cache control passes. Capture actual failures, not inferred ones.
+- [x] **4. Implement the candidate in the probe.** Use a `ContextVar` holding a tuple of observation records. `mark_script_execution()` sets every active record's `used_script` flag. A new observation uses `token = variable.set(previous + (record,))` and always resets it in `finally`.
 
 The sync module algorithm is:
 
@@ -128,9 +128,9 @@ def _get_default_module(self, ctx=None):
 Provide an async equivalent using `await self.make_module_async()`. Do not call the stock caching implementation and clear `_module` afterward: that could expose a cached mutable instance transiently. Marking all active records prevents a wrapper module from caching a closure over an imported script. The source template is evaluated once for each fresh import; do not render twice to classify it.
 
 Install the mixin once with a composed class derived from `(ScriptTemplateMixin, environment.template_class)`. Guard repeated installation with `issubclass`. Exercise custom `make_module` and `make_module_async` overrides; do not claim compatibility with arbitrary custom private-method overrides if composition bypasses them.
-- [ ] **5. Expand and run the probe.** Verify import context modes, both async import forms, template globals versus render inputs, overlays, custom Template behavior, repeated failed renders, and ordinary macro caching. Reload templates through a fresh environment sharing a `FileSystemBytecodeCache` and verify freshness still works. No source-parsing metadata may be required for cache hits. A macro containing a script declaration must create its script when called, even if the macro's containing module is cached.
-- [ ] **6. Record the result and gate later work.** Write exact commands, results, observed constraints, Jinja internals relied on, and the selected mechanism to `docs/superpowers/experiments/import-lifecycle.md`. If the candidate fails or requires disabling all import caching, return to design review with the failing example and tradeoff. Do not silently weaken freshness, change context visibility, or add a new tag. Only proceed to Task 2 after the required behavior is proven.
-- [ ] **7. Commit the evidence.** Commit only the experiment report with message `docs: verify script import lifecycle integration`. Keep probe implementation temporary; production code enters with regression tests in subsequent tasks.
+- [x] **5. Expand and run the probe.** Verify import context modes, both async import forms, template globals versus render inputs, overlays, custom Template behavior, repeated failed renders, and ordinary macro caching. Reload templates through a fresh environment sharing a `FileSystemBytecodeCache` and verify freshness still works. No source-parsing metadata may be required for cache hits. A macro containing a script declaration must create its script when called, even if the macro's containing module is cached.
+- [x] **6. Record the result and gate later work.** Write exact commands, results, observed constraints, Jinja internals relied on, and the selected mechanism to `docs/superpowers/experiments/import-lifecycle.md`. If the candidate fails or requires disabling all import caching, return to design review with the failing example and tradeoff. Do not silently weaken freshness, change context visibility, or add a new tag. Only proceed to Task 2 after the required behavior is proven.
+- [x] **7. Commit the evidence.** Commit only the experiment report with message `docs: verify script import lifecycle integration`. Keep probe implementation temporary; production code enters with regression tests in subsequent tasks.
 
 ## Task 2: Preserve Python source and compile-time diagnostics
 
@@ -158,7 +158,7 @@ class NoInternalJinjaAccepted(TemplateSyntaxError): ...
 
 Keep old exceptions importable from `jinja_script_block`; use useful inherited messages rather than fixed misspelled messages. Additional syntax failures may use `TemplateSyntaxError` directly. Runtime execution remains temporarily at the existing timing in this task; Task 3 changes it explicitly.
 
-- [ ] **1. Add tests for names, indentation, and source locations.** Use `unittest.TestCase` and `Environment(extensions=[ScriptBlockExtension])`:
+- [x] **1. Add tests for names, indentation, and source locations.** Use `unittest.TestCase` and `Environment(extensions=[ScriptBlockExtension])`:
 
 ```python
 def test_duplicate_names_identify_source(self):
@@ -178,8 +178,8 @@ def test_template_delimiters_in_python_strings(self):
 ```
 
 Use subtests for missing name, `_private`, Python keywords, malformed end tag, empty body, comment-only body, inline body, CRLF input, blank lines, tabs, and indented multiline functions. Check duplicates across branches and macros, but permit the same name in two separately loaded templates. Add literal `{% script fake %}` inside Jinja comments and raw blocks; neither creates a declaration. Check custom block delimiters and whitespace options.
-- [ ] **2. Run the new source tests.** Run `python -m unittest tests.test_source -v`; confirm failure on the new behavior before changing parsing.
-- [ ] **3. Implement deterministic source extraction.** Use a local scanner driven by configured Jinja delimiters. Track text, quoted Jinja tag contents, comments, raw regions, and script bodies; do not use one regex over the entire template. Capture a script body through its configured closing tag, preserving start and end whitespace controls.
+- [x] **2. Run the new source tests.** Run `python -m unittest tests.test_source -v`; confirm failure on the new behavior before changing parsing.
+- [x] **3. Implement deterministic source extraction.** Use a local scanner driven by configured Jinja delimiters. Track text, quoted Jinja tag contents, comments, raw regions, and script bodies; do not use one regex over the entire template. Capture a script body through its configured closing tag, preserving start and end whitespace controls.
 
 Represent each captured body inside a private encoded payload in the rewritten script tag. For example, encode `(raw_body, first_lineno)` as JSON and then as a Jinja string literal. Keep the same total newline count by padding within the rewritten tag. The payload travels with source/bytecode, not an extension-level dictionary. Reject manually supplied extra script arguments instead of exposing payload encoding as public syntax. Escape payloads correctly when custom delimiters contain quote characters; test the selected encoding.
 
@@ -196,8 +196,8 @@ name = parser.stream.expect("name").value
 ```
 
 Maintain the declaration map on the parser instance with an extension-specific attribute, never on the shared extension. For the same parser encountering a repeated declaration, raise an error with the first and repeated line numbers.
-- [ ] **4. Verify source behavior and old tests.** Run `python -m unittest tests.test_source tests.test_basic -v`. Verify no compile-time Python SyntaxWarning remains. Inspect a syntax error using a DictLoader template name and another using a real filename; both must point to the original line.
-- [ ] **5. Commit.** Commit parser, errors, public exports, and tests with message `refactor: preserve script source and validate declarations`.
+- [x] **4. Verify source behavior and old tests.** Run `python -m unittest tests.test_source tests.test_basic -v`. Verify no compile-time Python SyntaxWarning remains. Inspect a syntax error using a DictLoader template name and another using a real filename; both must point to the original line.
+- [x] **5. Commit.** Commit parser, errors, public exports, and tests with message `refactor: preserve script source and validate declarations`.
 
 ## Task 3: Execute scripts in fresh render-local namespaces
 
@@ -217,7 +217,7 @@ def execute_script(
 # integration.py supplies mark_script_execution() and its observer from Task 1.
 ```
 
-- [ ] **1. Add rendering tests before changing execution.**
+- [x] **1. Add rendering tests before changing execution.**
 
 ```python
 def test_execution_waits_for_render(self):
@@ -245,8 +245,8 @@ def test_python_assignment_does_not_rebind_template_input(self):
 ```
 
 Add skipped-conditional and per-loop execution cases, functions closing over render inputs, local `{% set %}` values, macro arguments, loop variables, `loop.index`, Python imports, functions, and classes. Use StrictUndefined to verify names are unavailable before declarations. Compare environment globals before and after compilation/rendering. Test a caller-owned list being mutated explicitly.
-- [ ] **2. Run the new tests and confirm timing/state failures.** Run `python -m unittest tests.test_runtime -v` before runtime changes. Update the old NameError test to build the template first and assert NameError from `render()`.
-- [ ] **3. Implement execution and AST assignment.**
+- [x] **2. Run the new tests and confirm timing/state failures.** Run `python -m unittest tests.test_runtime -v` before runtime changes. Update the old NameError test to build the template first and assert NameError from `render()`.
+- [x] **3. Implement execution and AST assignment.**
 
 ```python
 @lru_cache(maxsize=128)
@@ -279,8 +279,8 @@ nodes.Assign(
 Validate with `compile_script` at parse time, but execute only through the runtime call. Catch only `SyntaxError` during validation and chain it into `CompileError`; leave runtime exception types intact. Use a stable descriptive filename for unnamed templates rather than giving different unnamed sources indistinguishable tracebacks. Bound any linecache/source bookkeeping if added.
 
 Check the generated code for loop context. Jinja may omit constructing `loop` unless referenced in its AST; when a script occurs in a loop body, insert the necessary non-output `loop` reference in that scope or an equivalent minimal AST adaptation so the approved local-variable semantics hold. Do not make scripts in a nested macro accidentally bind an unrelated loop.
-- [ ] **4. Run runtime and parser regressions.** Run `python -m unittest discover -v`. Add a runtime failure with traceback inspection that verifies its original exception type and script line. Ensure repeated failures do not retain observer frames by subsequently rendering an ordinary template module and verifying its normal caching behavior.
-- [ ] **5. Commit.** Commit with message `feat: execute named scripts in fresh render namespaces`.
+- [x] **4. Run runtime and parser regressions.** Run `python -m unittest discover -v`. Add a runtime failure with traceback inspection that verifies its original exception type and script line. Ensure repeated failures do not retain observer frames by subsequently rendering an ordinary template module and verifying its normal caching behavior.
+- [x] **5. Commit.** Commit with message `feat: execute named scripts in fresh render namespaces`.
 
 ## Task 4: Integrate imports, includes, and inheritance
 
@@ -288,7 +288,7 @@ Check the generated code for loop context. Jinja may omit constructing `loop` un
 
 **Interfaces:** Install `install_template_integration(environment)` from Task 1 during extension initialization. It composes with `environment.template_class`; the runtime marks script execution using Task 3's observer. Preserve the public extension import-string identifier even though implementation moved to `extension.py`: use the existing identifier `jinja_script_block.ScriptBlockExtension` or document and test an intentional cache-breaking migration.
 
-- [ ] **1. Add imports tests using the real extension.**
+- [x] **1. Add imports tests using the real extension.**
 
 ```python
 loader = DictLoader({
@@ -306,11 +306,11 @@ assert [page.render(), page.render()] == ["1:0", "1:0"]
 ```
 
 Use unittest assertions in the committed suite. Cover `import ... as module`, dynamic source names, with/without context, template globals propagated through imports, transitive wrappers, and mixed-content files. A no-context helper containing `value = supplied` must raise NameError when `supplied` exists only as a caller render input; the same import with context must succeed. A pure macro library must retain its one-time initialization caching.
-- [ ] **2. Add composition tests.** A parent and included file both declare `helpers`; assert output `CardPage` and unchanged parent namespace. Repeat with `without context` and a global execution counter. Include a missing template with `ignore missing` and a list of fallback names; preserve Jinja behavior. For inheritance, test overridden blocks, `super()`, scripts that never execute, and same-named local block scripts. Check ordinary alias rebinding remains ordinary Jinja behavior rather than becoming a new global duplicate rule.
-- [ ] **3. Run tests against the missing import integration.** Run `python -m unittest tests.test_imports tests.test_composition -v`; verify cached script-state regressions fail before installing the Template mixin.
-- [ ] **4. Port the proven lifecycle mechanism.** Move the Task 1 algorithm into `integration.py` and install it once per environment. Preserve inherited custom Template behavior and support overlays. Mark all enclosing module-creation observations, including script execution reached through includes or nested imports. A cached pure module never holds script-created mutable state from its creation. Keep Jinja's normal handling of globals, missing templates, and module exports. Use `try/finally` for observation cleanup.
-- [ ] **5. Run all composition cases.** Run `python -m unittest tests.test_imports tests.test_composition tests.test_runtime -v`. Add an environment subclass with a Template subclass overriding `make_module` to record calls; verify calls still occur and unrelated environments keep stock Template classes. If the lifecycle proof needs alteration, update the experiment report with actual evidence.
-- [ ] **6. Commit.** Commit with message `feat: reuse script namespaces through isolated Jinja imports`.
+- [x] **2. Add composition tests.** A parent and included file both declare `helpers`; assert output `CardPage` and unchanged parent namespace. Repeat with `without context` and a global execution counter. Include a missing template with `ignore missing` and a list of fallback names; preserve Jinja behavior. For inheritance, test overridden blocks, `super()`, scripts that never execute, and same-named local block scripts. Check ordinary alias rebinding remains ordinary Jinja behavior rather than becoming a new global duplicate rule.
+- [x] **3. Run tests against the missing import integration.** Run `python -m unittest tests.test_imports tests.test_composition -v`; verify cached script-state regressions fail before installing the Template mixin.
+- [x] **4. Port the proven lifecycle mechanism.** Move the Task 1 algorithm into `integration.py` and install it once per environment. Preserve inherited custom Template behavior and support overlays. Mark all enclosing module-creation observations, including script execution reached through includes or nested imports. A cached pure module never holds script-created mutable state from its creation. Keep Jinja's normal handling of globals, missing templates, and module exports. Use `try/finally` for observation cleanup.
+- [x] **5. Run all composition cases.** Run `python -m unittest tests.test_imports tests.test_composition tests.test_runtime -v`. Add an environment subclass with a Template subclass overriding `make_module` to record calls; verify calls still occur and unrelated environments keep stock Template classes. If the lifecycle proof needs alteration, update the experiment report with actual evidence.
+- [x] **6. Commit.** Commit with message `feat: reuse script namespaces through isolated Jinja imports`.
 
 ## Task 5: Verify concurrency, async rendering, and bytecode reuse
 
@@ -318,7 +318,7 @@ Use unittest assertions in the committed suite. Cover `import ... as module`, dy
 
 **Interfaces:** No new public API. Exercise `Template.render`, `render_async`, `generate`, standard bytecode caching, and environment overlays.
 
-- [ ] **1. Add deterministic concurrent-render cases.**
+- [x] **1. Add deterministic concurrent-render cases.**
 
 ```python
 barrier = threading.Barrier(2)
@@ -333,7 +333,7 @@ with ThreadPoolExecutor(max_workers=2) as pool:
 ```
 
 Repeat using an imported helper with context. For default imports, use a shared environment-global barrier solely for synchronization, and verify each imported script's own list has length one. Do not use sleep-based race assertions.
-- [ ] **2. Add cache-reload tests.**
+- [x] **2. Add cache-reload tests.**
 
 ```python
 with tempfile.TemporaryDirectory() as directory:
@@ -348,10 +348,10 @@ with tempfile.TemporaryDirectory() as directory:
 ```
 
 Cover both import forms, the transitive wrapper fixture, a direct script template, and include without context. Confirm the second environment actually loads bytecode by wrapping its compilation path with a failure if invoked for unchanged fixtures. Test auto-reload with changed source, preserving stock loader semantics.
-- [ ] **3. Add async lifecycle cases.** Use `unittest.IsolatedAsyncioTestCase`, `Environment(enable_async=True)`, and synchronous Python script bodies. Exercise `render_async`, both import forms, include without context, and concurrent `asyncio.gather` renders. Coordinate a cancellation through an awaited Jinja global immediately after a script declaration during import construction; cancel the task, then verify a later render and pure-module cache control succeed. This tests observer cleanup without allowing `await` inside Python scripts.
-- [ ] **4. Run lifecycle tests and fix only demonstrated defects.** Run `python -m unittest tests.test_lifecycle -v`. Record the initial results; if they pass, do not introduce a contrived failure. If a defect appears, minimize it, retain the failing regression, and repair the responsible module. Add a partially consumed `generate()` stream that is closed, then verify another render receives fresh script state.
-- [ ] **5. Run the full suite once after changes.** Run `python -m unittest discover -v` and `python -W error::SyntaxWarning -m compileall -q jinja_script_block tests`. Verify the compiled-code cache is bounded by its configured maximum; do not assert cache hit counts that merely mirror implementation.
-- [ ] **6. Commit.** Commit with message `test: cover script lifecycle across concurrent renders and caches`.
+- [x] **3. Add async lifecycle cases.** Use `unittest.IsolatedAsyncioTestCase`, `Environment(enable_async=True)`, and synchronous Python script bodies. Exercise `render_async`, both import forms, include without context, and concurrent `asyncio.gather` renders. Coordinate a cancellation through an awaited Jinja global immediately after a script declaration during import construction; cancel the task, then verify a later render and pure-module cache control succeed. This tests observer cleanup without allowing `await` inside Python scripts.
+- [x] **4. Run lifecycle tests and fix only demonstrated defects.** Run `python -m unittest tests.test_lifecycle -v`. Record the initial results; if they pass, do not introduce a contrived failure. If a defect appears, minimize it, retain the failing regression, and repair the responsible module. Add a partially consumed `generate()` stream that is closed, then verify another render receives fresh script state.
+- [x] **5. Run the full suite once after changes.** Run `python -m unittest discover -v` and `python -W error::SyntaxWarning -m compileall -q jinja_script_block tests`. Verify the compiled-code cache is bounded by its configured maximum; do not assert cache hit counts that merely mirror implementation.
+- [x] **6. Commit.** Commit with message `test: cover script lifecycle across concurrent renders and caches`.
 
 ## Task 6: Modernize packaging, examples, and migration documentation
 
@@ -359,7 +359,7 @@ Cover both import forms, the transitive wrapper fixture, a direct script templat
 
 **Interfaces:** Keep distribution `jinja-script-block`, package `jinja_script_block`, and public extension imports. Use the next minor package version `0.1.0` for this breaking pre-1.0 change, without publishing or tagging a release.
 
-- [ ] **1. Define build metadata.**
+- [x] **1. Define build metadata.**
 
 ```toml
 [build-system]
@@ -383,7 +383,7 @@ include = ["jinja_script_block*"]
 ```
 
 Inspect repository history for license evidence. Preserve the existing generic BSD metadata without guessing a BSD variant; if no exact terms exist, record that limitation in the handoff rather than fabricating a LICENSE. Setuptools compatibility determines whether the legacy generic declaration is expressed as `license = {text = "BSD"}`. Add no runtime dependency beyond Jinja.
-- [ ] **2. Update executable examples.** Keep the original list-mutation example working under the new lifetime. Add `examples/reuse.py` using DictLoader, a `pricing` script, a function taking an `items` argument, and both import forms. A minimal reusable fixture is:
+- [x] **2. Update executable examples.** Keep the original list-mutation example working under the new lifetime. Add `examples/reuse.py` using DictLoader, a `pricing` script, a function taking an `items` argument, and both import forms. A minimal reusable fixture is:
 
 ```python
 env = Environment(loader=DictLoader({
@@ -394,9 +394,9 @@ print(env.get_template("page").render(items=[3, 4]))
 ```
 
 Run `python -m examples.basic` and `python -m examples.reuse`; the reuse example must print `7`.
-- [ ] **3. Rewrite usage and migration documentation.** Show installation, extension configuration, render-time errors, namespaced values, imports/aliases, with-context behavior, mixed-content imports, include versus import, per-template duplicate validation, state lifetime, caller-object mutation, and ordinary Python imports. State that templates execute trusted Python and that Python async syntax is not supported. Explain the deliberate import lifecycle integration and which Jinja internals it uses. Include before/after examples for environment-global reliance and exceptions moving from template loading to rendering.
-- [ ] **4. Add CI and housekeeping.** Add ignores for `.venv/`, `build/`, and local tool caches while retaining existing useful ignores. Configure a matrix for supported Python versions 3.10 through the current stable version verified during execution, with Jinja 3.1.0 and the latest 3.1.x on compatible interpreters. Use official Python/Jinja sources to verify version availability, then pin CI action references appropriately. Each job installs the project and runs `python -m unittest discover -v`. One job builds both distributions and runs artifact smoke checks.
-- [ ] **5. Build and test installed artifacts outside the checkout.** Install build tooling in the isolated development environment, run `python -m build`, inspect wheel and sdist contents, and install each into a separate temporary virtual environment. From a directory outside the source tree, run:
+- [x] **3. Rewrite usage and migration documentation.** Show installation, extension configuration, render-time errors, namespaced values, imports/aliases, with-context behavior, mixed-content imports, include versus import, per-template duplicate validation, state lifetime, caller-object mutation, and ordinary Python imports. State that templates execute trusted Python and that Python async syntax is not supported. Explain the deliberate import lifecycle integration and which Jinja internals it uses. Include before/after examples for environment-global reliance and exceptions moving from template loading to rendering.
+- [x] **4. Add CI and housekeeping.** Add ignores for `.venv/`, `build/`, and local tool caches while retaining existing useful ignores. Configure a matrix for supported Python versions 3.10 through the current stable version verified during execution, with Jinja 3.1.0 and the latest 3.1.x on compatible interpreters. Use official Python/Jinja sources to verify version availability, then pin CI action references appropriately. Each job installs the project and runs `python -m unittest discover -v`. One job builds both distributions and runs artifact smoke checks.
+- [x] **5. Build and test installed artifacts outside the checkout.** Install build tooling in the isolated development environment, run `python -m build`, inspect wheel and sdist contents, and install each into a separate temporary virtual environment. From a directory outside the source tree, run:
 
 ```python
 from jinja2 import Environment
@@ -409,7 +409,7 @@ assert template.render() == "7"
 ```
 
 Also run the reusable-import fixture against the installed package. Confirm tests/examples are not installed as top-level packages. Record any unavailable interpreter or network-dependent validation accurately rather than calling it passed.
-- [ ] **6. Final validation and review.** Run the full suite and examples after the final changes; run `git diff --check`. Review against the spec and migration examples, especially the five Review Focus cases. Follow the chosen execution workflow's code-review and branch-finishing skills; do not merge or publish by inference. Commit with message `build: modernize package metadata and document render-time scripts`.
+- [x] **6. Final validation and review.** Run the full suite and examples after the final changes; run `git diff --check`. Review against the spec and migration examples, especially the five Review Focus cases. Follow the chosen execution workflow's code-review and branch-finishing skills; do not merge or publish by inference. Commit with message `build: modernize package metadata and document render-time scripts`.
 
 ## Plan self-review and handoff
 

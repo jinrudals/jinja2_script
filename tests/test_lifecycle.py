@@ -227,3 +227,79 @@ class AsyncLifecycleTests(unittest.IsolatedAsyncioTestCase):
         t = env.from_string('{% from "lib" import state %}' + COUNT)
         self.assertEqual([await t.render_async(), await t.render_async()], ["1", "1"])
         self.assertEqual(calls, ["lib", "lib"])
+
+
+class DependencyLifecycleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_skipped_dependencies_after_bytecode_reload(self):
+        sources = {
+            "lib": "{% if flag.enabled %}{% script s %}\nevents.append(1)\n{% endscript %}{% endif %}",
+            "wrapper": '{% if flag.enabled %}{% import "lib" as lib %}{% endif %}',
+            "dynamic": "{% if flag.enabled %}{% import target as lib %}{% endif %}",
+            "pure": "{% macro text() %}ok{% endmacro %}",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            for asynchronous in [False, True]:
+                cache = FileSystemBytecodeCache(
+                    directory, pattern=f"{asynchronous}-%s.cache"
+                )
+                for reload in [False, True]:
+                    env = Environment(
+                        loader=DictLoader(sources),
+                        extensions=[ScriptBlockExtension],
+                        bytecode_cache=cache,
+                        enable_async=asynchronous,
+                    )
+                    flag = {"enabled": False}
+                    events = []
+                    env.globals.update(flag=flag, events=events, target="lib")
+                    for library in ["lib", "wrapper", "dynamic"]:
+                        for tag in [
+                            f'{{% import "{library}" as lib %}}',
+                            f'{{% include "{library}" without context %}}',
+                        ]:
+                            with self.subTest(
+                                asynchronous=asynchronous,
+                                reload=reload,
+                                library=library,
+                                tag=tag,
+                            ):
+                                events.clear()
+                                flag["enabled"] = False
+                                t = env.from_string(tag)
+                                if asynchronous:
+                                    await t.render_async()
+                                else:
+                                    t.render()
+                                self.assertEqual(events, [])
+                                flag["enabled"] = True
+                                for _ in range(2):
+                                    if asynchronous:
+                                        await t.render_async()
+                                    else:
+                                        t.render()
+                                self.assertEqual(events, [1, 1])
+
+    async def test_precompiled_module_loader_keeps_script_metadata(self):
+        from jinja2 import ModuleLoader
+
+        sources = {
+            "lib": "{% if flag.enabled %}{% script s %}\nevents.append(1)\n{% endscript %}{% endif %}",
+            "page": '{% import "lib" as lib %}',
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            source_env = Environment(
+                loader=DictLoader(sources), extensions=[ScriptBlockExtension]
+            )
+            source_env.compile_templates(directory, zip=None, ignore_errors=False)
+            env = Environment(
+                loader=ModuleLoader(directory), extensions=[ScriptBlockExtension]
+            )
+            flag = {"enabled": False}
+            events = []
+            env.globals.update(flag=flag, events=events)
+            t = env.get_template("page")
+            t.render()
+            flag["enabled"] = True
+            t.render()
+            t.render()
+            self.assertEqual(events, [1, 1])
