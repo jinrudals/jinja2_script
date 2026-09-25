@@ -1,27 +1,28 @@
-from jinja_script_block import ScriptBlockExtension
+"""Run with python -m examples.basic from the project directory."""
+
 from jinja2 import Environment
 
-env = Environment(extensions=[ScriptBlockExtension])
+from jinja_script_block import ScriptBlockExtension
 
-template = env.from_string('''
-  {%- script myblock %}   
-  containers = []
-  value = 333
-  {% endscript -%}
 
-  {%- script myblock2 %}
-  def add(obj):
+def main():
+    env = Environment(extensions=[ScriptBlockExtension])
+    template = env.from_string("""
+{%- script data %}
+containers = []
+value = 333
+{% endscript -%}
+{%- script helpers %}
+def add(obj):
     obj.append(3)
-  def function(value):
-    if value == "xx":
-      return ''
-  {% endscript -%}
+{% endscript -%}
+{%- set _ = data.containers.append('1') -%}
+{%- set _ = helpers.add(data.containers) -%}
+{{ data.containers }}
+{{ data.value }}
+""")
+    print(template.render())
 
-{%- set _=myblock.containers.append('1') -%}
-{%- set _=myblock2.add(myblock.containers) -%}
 
-{{myblock.containers}}
-{{myblock.value}}
-''')
-rendered = template.render()
-print(rendered)
+if __name__ == "__main__":
+    main()
