@@ -2,11 +2,14 @@
 
 import hashlib
 import keyword
+from typing import Any
 
-from jinja2 import TemplateSyntaxError, nodes
+from jinja2 import Environment, nodes
 from jinja2.ext import Extension
+from jinja2.parser import Parser
+from jinja2.runtime import Context
 
-from .errors import CompileError
+from .errors import ScriptNameError, ScriptSyntaxError
 from .integration import install_template_integration
 from .runtime import compile_script, execute_script
 from .source import (
@@ -22,14 +25,16 @@ class ScriptBlockExtension(Extension):
 
     tags = {"script"}
 
-    def __init__(self, environment):
+    def __init__(self, environment: Environment) -> None:
         super().__init__(environment)
         install_template_integration(environment)
 
-    def preprocess(self, source, name, filename=None):
+    def preprocess(
+        self, source: str, name: str | None, filename: str | None = None
+    ) -> str:
         return rewrite_script_blocks(source, self.environment, name, filename)
 
-    def parse(self, parser):
+    def parse(self, parser: Parser) -> list[nodes.Node]:
         lineno = next(parser.stream).lineno
         name = parser.stream.expect("name").value
         if (
@@ -38,17 +43,20 @@ class ScriptBlockExtension(Extension):
             or name.startswith("_")
             or name in {"true", "false", "none"}
         ):
-            raise TemplateSyntaxError(
+            raise ScriptNameError(
                 "Invalid public script namespace: " + name,
                 lineno,
                 parser.name,
                 parser.filename,
             )
-        declarations = getattr(parser, "_script_block_declarations", None)
+        declarations: dict[str, int] | None = getattr(
+            parser, "_script_block_declarations", None
+        )
         if declarations is None:
-            declarations = parser._script_block_declarations = {}
+            declarations = {}
+            parser._script_block_declarations = declarations  # type: ignore[attr-defined]
         if name in declarations:
-            raise TemplateSyntaxError(
+            raise ScriptNameError(
                 f"Duplicate script {name!r}; first declared at line {declarations[name]}",
                 lineno,
                 parser.name,
@@ -66,7 +74,7 @@ class ScriptBlockExtension(Extension):
         try:
             compile_script(source, filename)
         except SyntaxError as error:
-            raise CompileError(
+            raise ScriptSyntaxError(
                 error.msg, error.lineno or lineno, parser.name, parser.filename
             ) from error
         context_names = referenced_context_names(source, filename)
@@ -85,15 +93,23 @@ class ScriptBlockExtension(Extension):
         ).set_lineno(lineno)
         # Make compiler-created context bindings visible even when Python
         # is their only consumer. Do not activate unused macro parameters.
-        return [
+        statements: list[nodes.Node] = [
             *(
                 nodes.ExprStmt(nodes.Name(key, "load")).set_lineno(lineno)
                 for key in context_names
             ),
             assignment,
         ]
+        return statements
 
-    def _execute(self, context, name, source, filename, context_names):
+    def _execute(
+        self,
+        context: Context,
+        name: str,
+        source: str,
+        filename: str,
+        context_names: tuple[str, ...],
+    ) -> Any:
         return execute_script(context, name, source, filename, context_names)
 
 
