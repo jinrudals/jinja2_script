@@ -2,9 +2,9 @@
 
 import unittest
 
-from jinja2 import DictLoader, Environment
+from jinja2 import DictLoader, Environment, TemplateNotFound
 
-from jinja_script_block import ScriptBlockExtension
+from jinja_script_block import ScriptBlockExtension, ScriptSyntaxError
 
 LIB = "{% script state %}\nvalues=[]\n{% endscript %}"
 
@@ -202,3 +202,64 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(t.render(), "False")
         flag["enabled"] = True
         self.assertEqual(t.render(), "True")
+
+    def test_unexecuted_declaration_is_not_exported(self):
+        e = self.environment(
+            {
+                "lib": "{% if enabled %}{% script s %}\nx=1\n{% endscript %}{% endif %}",
+                "page": '{% from "lib" import s %}{{ s is defined }}',
+            }
+        )
+        self.assertEqual(e.get_template("page").render(), "False")
+
+    def test_macro_local_script_is_not_exported_by_import(self):
+        e = self.environment(
+            {
+                "lib": "{% macro m() %}{% script s %}\nx=1\n{% endscript %}{{ s.x }}{% endmacro %}",
+                "page": '{% import "lib" as lib %}{{ lib.s is defined }}{{ lib.m() }}',
+            }
+        )
+        self.assertEqual(e.get_template("page").render(), "False1")
+
+    def test_same_name_in_importer_and_library_stay_separate(self):
+        e = self.environment(
+            {
+                "lib": '{% script s %}\nv="lib"\n{% endscript %}',
+                "page": '{% script s %}\nv="page"\n{% endscript %}{% from "lib" import s as other %}{{ s.v }}{{ other.v }}',
+            }
+        )
+        self.assertEqual(e.get_template("page").render(), "pagelib")
+
+    def test_import_does_not_emit_library_text(self):
+        e = self.environment(
+            {
+                "lib": "text{% script s %}\nv=1\n{% endscript %}",
+                "page": '{% from "lib" import s %}[{{ s.v }}]',
+            }
+        )
+        self.assertEqual(e.get_template("page").render(), "[1]")
+
+    def test_import_with_context_exposes_render_inputs(self):
+        e = self.environment(
+            {
+                "lib": "{% script s %}\nv = who\n{% endscript %}",
+                "page": '{% import "lib" as lib with context %}{{ lib.s.v }}',
+            }
+        )
+        self.assertEqual(e.get_template("page").render(who="me"), "me")
+
+    def test_missing_import_target_raises(self):
+        e = self.environment({"page": '{% from "nope" import s %}'})
+        with self.assertRaises(TemplateNotFound):
+            e.get_template("page").render()
+
+    def test_library_syntax_error_surfaces_on_import(self):
+        e = self.environment(
+            {
+                "lib": "{% script s %}\nx = (\n{% endscript %}",
+                "page": '{% from "lib" import s %}',
+            }
+        )
+        with self.assertRaises(ScriptSyntaxError) as raised:
+            e.get_template("page").render()
+        self.assertEqual(raised.exception.name, "lib")
