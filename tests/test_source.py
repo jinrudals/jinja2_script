@@ -1,5 +1,9 @@
 """Parsing must preserve Python, reject ambiguous declarations, and locate errors."""
 
+import contextlib
+import io
+import pathlib
+import re
 import unittest
 
 from jinja2 import Environment, TemplateSyntaxError
@@ -274,3 +278,158 @@ class ErrorMessageTests(unittest.TestCase):
             self.assertIn(old, message)
             self.assertIn("jinja_script_block." + new, message)
             self.assertIn("0.1.0", message)
+
+    def test_python_keywords_and_dunder_names_are_rejected(self):
+        for name in ["True", "None", "lambda", "async", "await", "__x__", "_"]:
+            with self.subTest(name=name), self.assertRaises(ScriptNameError) as raised:
+                self.env.from_string(
+                    "\n{% script " + name + " %}\nx=1\n{% endscript %}",
+                    None,
+                )
+            self.assertEqual(raised.exception.lineno, 2)
+
+    def test_soft_keywords_and_underscore_inside_names_are_allowed(self):
+        for name in ["match", "case", "type", "a_b", "a_", "Name1"]:
+            with self.subTest(name=name):
+                template = self.env.from_string(
+                    "{% script "
+                    + name
+                    + " %}\nx=1\n{% endscript %}{{ "
+                    + name
+                    + ".x }}"
+                )
+                self.assertEqual(template.render(), "1")
+
+    def test_names_are_case_sensitive_for_duplicates(self):
+        template = self.env.from_string(
+            "{% script a %}x=1{% endscript %}{% script A %}x=2{% endscript %}{{ a.x }}{{ A.x }}"
+        )
+        self.assertEqual(template.render(), "12")
+
+    def test_duplicate_inside_loop_block_and_macro_is_rejected(self):
+        for wrapper in [
+            "{% for i in [1] %}BODY{% endfor %}",
+            "{% block b %}BODY{% endblock %}",
+            "{% macro m() %}BODY{% endmacro %}",
+            "{% call m() %}BODY{% endcall %}",
+        ]:
+            body = "{% script dup %}x=1{% endscript %}"
+            source = body + wrapper.replace("BODY", body)
+            with self.subTest(wrapper=wrapper), self.assertRaises(ScriptNameError):
+                self.env.from_string(
+                    "{% macro m() %}{{ caller() }}{% endmacro %}" + source
+                )
+
+    def test_duplicate_is_rejected_when_both_declarations_are_skipped(self):
+        with self.assertRaises(ScriptNameError):
+            self.env.from_string(
+                "{% if false %}{% script s %}x=1{% endscript %}{% endif %}"
+                "{% if false %}{% script s %}x=2{% endscript %}{% endif %}"
+            )
+
+    def test_endscript_inside_python_string_terminates_the_block(self):
+        source = 'a\n{% script s %}\nvalue = "{% endscript %}"\n{% endscript %}'
+        with self.assertRaises(TemplateSyntaxError) as raised:
+            self.env.from_string(source)
+        self.assertEqual(raised.exception.lineno, 4)
+
+    def test_endscript_accepts_whitespace_variants(self):
+        for close in ["{%endscript%}", "{%- endscript -%}", "{%   endscript   %}"]:
+            with self.subTest(close=close):
+                template = self.env.from_string(
+                    "{% script s %}x=1" + close + "{{ s.x }}"
+                )
+                self.assertEqual(template.render(), "1")
+
+    def test_extra_tokens_in_script_header_are_rejected(self):
+        for header in ["a b", "a, b", "a.b", "a-b", '"a"']:
+            with self.subTest(header=header), self.assertRaises(TemplateSyntaxError):
+                self.env.from_string("{% script " + header + " %}x=1{% endscript %}")
+
+    def test_stray_endscript_is_rejected(self):
+        with self.assertRaises(TemplateSyntaxError):
+            self.env.from_string("{% endscript %}")
+
+    def test_relative_indentation_is_preserved_after_dedent(self):
+        template = self.env.from_string(
+            "{% script s %}\n"
+            "      class A:\n"
+            "          def f(self):\n"
+            "              return [\n"
+            "                  1,\n"
+            "              ]\n"
+            "      value = A().f()\n"
+            "{% endscript %}{{ s.value }}"
+        )
+        self.assertEqual(template.render(), "[1]")
+
+    def test_inconsistent_indentation_is_a_syntax_error_with_line(self):
+        source = "{% script s %}\n    x = 1\n  y = 2\n{% endscript %}"
+        with self.assertRaises(ScriptSyntaxError) as raised:
+            self.env.from_string(source)
+        self.assertIn(raised.exception.lineno, (2, 3))
+
+    def test_python_await_is_a_compile_error(self):
+        with self.assertRaises(ScriptSyntaxError):
+            self.env.from_string("{% script s %}\nvalue = await f()\n{% endscript %}")
+
+    def test_invalid_python_fails_at_compile_not_render(self):
+        with self.assertRaises(ScriptSyntaxError) as raised:
+            self.env.from_string(
+                "{% if false %}{% script s %}\nx = = 1\n{% endscript %}{% endif %}"
+            )
+        self.assertEqual(raised.exception.lineno, 2)
+
+    def test_scripts_emit_no_output_and_output_is_escaped(self):
+        env = Environment(extensions=[ScriptBlockExtension], autoescape=True)
+        template = env.from_string(
+            "[{% script s %}\nvalue = '<b>'\n_ = 'ignored'\n{% endscript %}]{{ s.value }}"
+        )
+        self.assertEqual(template.render(), "[]&lt;b&gt;")
+
+    def test_print_goes_to_stdout_not_template(self):
+        template = self.env.from_string(
+            "{% script s %}\nprint('hello')\n{% endscript %}x"
+        )
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(template.render(), "x")
+        self.assertEqual(out.getvalue(), "hello\n")
+
+    def test_multiple_scripts_keep_template_line_numbers_in_errors(self):
+        source = "{% script a %}\nx=1\n{% endscript %}\n\n{% script b %}\n\ny = (\n{% endscript %}"
+        with self.assertRaises(ScriptSyntaxError) as raised:
+            self.env.from_string(source)
+        self.assertEqual(raised.exception.lineno, 7)
+
+    def test_version_matches_project_metadata(self):
+        root = pathlib.Path(__file__).resolve().parents[1]
+        text = (root / "pyproject.toml").read_text()
+        match = re.search(r'^version = "([^"]+)"', text, re.MULTILINE)
+        self.assertEqual(jinja_script_block.__version__, match.group(1))
+        self.assertIn("__version__", jinja_script_block.__all__)
+
+    def test_public_api_is_exactly_all(self):
+        self.assertEqual(
+            sorted(jinja_script_block.__all__),
+            sorted(
+                [
+                    "ScriptBlockExtension",
+                    "ScriptBlockError",
+                    "ScriptNameError",
+                    "ScriptSyntaxError",
+                    "__version__",
+                ]
+            ),
+        )
+
+    def test_deprecated_names_work_with_from_import(self):
+        with self.assertWarns(DeprecationWarning):
+            from jinja_script_block import NoModuleNameDefined
+        self.assertIs(NoModuleNameDefined, ScriptNameError)
+        self.assertNotIn("NoModuleNameDefined", jinja_script_block.__all__)
+
+    def test_deprecated_name_can_still_catch_new_error(self):
+        with self.assertWarns(DeprecationWarning):
+            legacy = jinja_script_block.NoModuleNameDefined
+        with self.assertRaises(legacy):
+            self.env.from_string("{% script %}{% endscript %}")
