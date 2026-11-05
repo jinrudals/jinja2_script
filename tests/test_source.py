@@ -4,7 +4,13 @@ import unittest
 
 from jinja2 import Environment, TemplateSyntaxError
 
-from jinja_script_block import CompileError, NoModuleNameDefined, ScriptBlockExtension
+import jinja_script_block
+from jinja_script_block import (
+    ScriptBlockError,
+    ScriptBlockExtension,
+    ScriptNameError,
+    ScriptSyntaxError,
+)
 
 
 class SourceTests(unittest.TestCase):
@@ -75,8 +81,26 @@ class SourceTests(unittest.TestCase):
                 self.env.from_string("{% script " + name + " %}x=1{% endscript %}")
 
     def test_missing_name(self):
-        with self.assertRaises(NoModuleNameDefined):
+        with self.assertRaises(ScriptNameError):
             self.env.from_string("{% script %}x=1{% endscript %}")
+
+    def test_deprecated_error_names(self):
+        for old, new in [
+            ("NoModuleNameDefined", ScriptNameError),
+            ("NoInternalJinjaAccepted", ScriptSyntaxError),
+            ("CompileError", ScriptSyntaxError),
+        ]:
+            with self.subTest(old=old), self.assertWarns(DeprecationWarning):
+                self.assertIs(getattr(jinja_script_block, old), new)
+        with self.assertRaises(AttributeError):
+            jinja_script_block.Missing
+
+    def test_error_hierarchy(self):
+        for error in [ScriptNameError, ScriptSyntaxError]:
+            self.assertTrue(issubclass(error, ScriptBlockError))
+            self.assertTrue(issubclass(error, TemplateSyntaxError))
+        with self.assertRaises(ScriptNameError):
+            self.env.from_string("{% script _x %}{% endscript %}")
 
     def test_missing_end(self):
         with self.assertRaises(TemplateSyntaxError):
@@ -84,7 +108,7 @@ class SourceTests(unittest.TestCase):
 
     def test_syntax_error_location(self):
         source = "first\n{% script bad %}\n    x = (\n{% endscript %}"
-        with self.assertRaises(CompileError) as raised:
+        with self.assertRaises(ScriptSyntaxError) as raised:
             self.env.compile(
                 source, name="broken.jinja", filename="/templates/broken.jinja"
             )

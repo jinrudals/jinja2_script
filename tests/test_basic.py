@@ -4,7 +4,7 @@ import unittest
 from jinja2 import Environment
 from jinja2.exceptions import UndefinedError
 
-from jinja_script_block import NoModuleNameDefined, ScriptBlockExtension
+from jinja_script_block import ScriptBlockExtension, ScriptNameError
 
 
 class ExtensionUnitTest(unittest.TestCase):
@@ -12,7 +12,7 @@ class ExtensionUnitTest(unittest.TestCase):
         self.env = Environment(extensions=[ScriptBlockExtension])
 
     def test_fail_when_no_module_is_defined(self):
-        with self.assertRaises(NoModuleNameDefined):
+        with self.assertRaises(ScriptNameError):
             self.env.from_string("""
       {% script %}
       test

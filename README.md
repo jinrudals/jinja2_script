@@ -1,4 +1,9 @@
-# Jinja2 Script
+# jinja-script-block
+
+[![PyPI](https://img.shields.io/pypi/v/jinja-script-block)](https://pypi.org/project/jinja-script-block/)
+[![Python](https://img.shields.io/pypi/pyversions/jinja-script-block)](https://pypi.org/project/jinja-script-block/)
+[![Tests](https://github.com/jinrudals/jinja2_script/actions/workflows/tests.yml/badge.svg)](https://github.com/jinrudals/jinja2_script/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Define named Python helpers inside Jinja templates and reuse them through ordinary Jinja imports. Script code executes during rendering, in the order its declarations are reached, similar to ERB's embedded scripting.
 
@@ -6,11 +11,11 @@ Requires Python 3.10+ and Jinja 3.1.x. Version 0.1 changes execution timing and 
 
 ## Installation
 
-Install this checkout:
-
 ```sh
-python -m pip install .
+python -m pip install jinja-script-block
 ```
+
+To install a checkout instead, run `python -m pip install .`.
 
 Enable the extension:
 
@@ -133,7 +138,7 @@ This integration depends on Jinja 3.1's `_get_default_module`, `_get_default_mod
 
 Invalid Python, missing names, duplicate declarations, and malformed blocks fail at template compilation with a template name and line. Runtime exceptions occur during rendering or import execution, retaining their Python exception type and source location.
 
-`CompileError`, `NoModuleNameDefined`, and `NoInternalJinjaAccepted` remain importable for compatibility and now participate in Jinja's `TemplateSyntaxError` hierarchy.
+All compile-time errors derive from `ScriptBlockError`, itself a `jinja2.TemplateSyntaxError`: `ScriptNameError` for missing, invalid, or duplicate names and `ScriptSyntaxError` for invalid Python. The pre-0.1 names `NoModuleNameDefined`, `NoInternalJinjaAccepted`, and `CompileError` still import but emit a `DeprecationWarning`.
 
 Script blocks execute arbitrary trusted Python. They are not a sandbox, and Jinja's `SandboxedEnvironment` does not restrict them. Python `await` syntax inside script blocks is unsupported; use ordinary synchronous scripts even with Jinja's `render_async()`.
 
@@ -178,15 +183,22 @@ Syntax errors still occur when compiling the template. If persistent state is in
 
 ```sh
 python -m venv .venv
-.venv/bin/python -m pip install -e . build ruff
+.venv/bin/python -m pip install -e . build ruff mypy
 .venv/bin/python -m unittest discover -v
 .venv/bin/python -m examples.basic
 .venv/bin/python -m examples.reuse
 .venv/bin/ruff check .
 .venv/bin/ruff format --check .
+.venv/bin/mypy jinja_script_block
 .venv/bin/python -m build
 ```
 
 CI runs Python 3.10–3.14 with minimum and current Jinja 3.1 versions, and checks both built distributions. Python 3.14's stable release is documented by [Python.org](https://www.python.org/downloads/release/python-3140/); Jinja's supported series is documented in its [release history](https://jinja.palletsprojects.com/en/stable/changes/).
 
-The original package metadata declares BSD, but the repository history contains no license file specifying the variant. That metadata is retained without inventing license terms.
+## Releasing
+
+Bump the version in `pyproject.toml` and `jinja_script_block/__init__.py`, update `CHANGELOG.md`, and publish a GitHub Release. The `publish` workflow builds and checks the distributions, then uploads them to PyPI through [trusted publishing](https://docs.pypi.org/trusted-publishers/) (no API token). Run it manually from the Actions tab to upload to TestPyPI first.
+
+## License
+
+[MIT](LICENSE)

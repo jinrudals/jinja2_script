@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 
-from jinja2 import TemplateError
+from jinja2 import Environment, TemplateError
 
 from .compiler import install_compiler_integration
 
@@ -113,7 +113,7 @@ class ScriptTemplateMixin:
         return result
 
 
-def install_template_integration(environment) -> None:
+def install_template_integration(environment: Environment) -> None:
     """Compose per environment, preserving custom public Template methods."""
     install_compiler_integration(environment)
     if not issubclass(environment.template_class, ScriptTemplateMixin):

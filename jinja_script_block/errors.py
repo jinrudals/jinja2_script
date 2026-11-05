@@ -1,15 +1,42 @@
-"""Source-aware errors, including the original public exception names."""
+"""Template-aware errors raised while compiling script blocks."""
+
+import warnings
+from typing import Any
 
 from jinja2 import TemplateSyntaxError
 
-
-class NoModuleNameDefined(TemplateSyntaxError):
-    """A script declaration is missing its namespace name."""
+__all__ = ["ScriptBlockError", "ScriptNameError", "ScriptSyntaxError"]
 
 
-class NoInternalJinjaAccepted(TemplateSyntaxError):
-    """Compatibility name for invalid template syntax inside Python."""
+class ScriptBlockError(TemplateSyntaxError):
+    """Base class for every compile-time script block error."""
 
 
-class CompileError(NoInternalJinjaAccepted):
+class ScriptNameError(ScriptBlockError):
+    """A script has a missing, invalid, or duplicate namespace name."""
+
+
+class ScriptSyntaxError(ScriptBlockError):
     """The Python source in a script block is invalid."""
+
+
+# Names used before 0.1.0. They resolve to the new classes with a warning.
+_DEPRECATED = {
+    "NoModuleNameDefined": ScriptNameError,
+    "NoInternalJinjaAccepted": ScriptSyntaxError,
+    "CompileError": ScriptSyntaxError,
+}
+
+
+def deprecated_error(name: str) -> Any:
+    """Resolve a pre-0.1.0 exception name, warning about its replacement."""
+    try:
+        replacement = _DEPRECATED[name]
+    except KeyError:
+        raise AttributeError(name) from None
+    warnings.warn(
+        f"{name} is deprecated; use {replacement.__name__} instead.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+    return replacement
