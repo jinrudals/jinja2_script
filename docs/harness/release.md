@@ -5,7 +5,7 @@ PyPI project: `jinja-script-block` (existing releases 0.0.2–0.0.4).
 ## Checklist
 
 1. Bump the version in `pyproject.toml` and `jinja_script_block/__init__.py`.
-2. Move the `CHANGELOG.md` entry from Unreleased to the new version.
+2. Add a `CHANGELOG.md` section for the new version.
 3. Run every command in `AGENTS.md#commands`; all must pass.
 4. Optionally run the `publish` workflow manually (workflow_dispatch) to upload to TestPyPI.
 5. Publish a GitHub Release tagged `vX.Y.Z`; the `publish` workflow uploads to PyPI.
