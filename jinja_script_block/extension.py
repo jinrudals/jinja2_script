@@ -1,7 +1,6 @@
 """Jinja parsing and namespace binding for Python script blocks."""
 
 import hashlib
-import keyword
 from typing import Any
 
 from jinja2 import Environment, nodes
@@ -14,6 +13,7 @@ from .integration import install_template_integration
 from .runtime import compile_script, execute_script
 from .source import (
     decode_script,
+    invalid_name_reason,
     prepare_python,
     referenced_context_names,
     rewrite_script_blocks,
@@ -37,14 +37,10 @@ class ScriptBlockExtension(Extension):
     def parse(self, parser: Parser) -> list[nodes.Node]:
         lineno = next(parser.stream).lineno
         name = parser.stream.expect("name").value
-        if (
-            not name.isidentifier()
-            or keyword.iskeyword(name)
-            or name.startswith("_")
-            or name in {"true", "false", "none"}
-        ):
+        reason = invalid_name_reason(name)
+        if reason:
             raise ScriptNameError(
-                "Invalid public script namespace: " + name,
+                f"Invalid script namespace name {name!r}: {reason}",
                 lineno,
                 parser.name,
                 parser.filename,
@@ -57,7 +53,9 @@ class ScriptBlockExtension(Extension):
             parser._script_block_declarations = declarations  # type: ignore[attr-defined]
         if name in declarations:
             raise ScriptNameError(
-                f"Duplicate script {name!r}; first declared at line {declarations[name]}",
+                f"Duplicate script name {name!r} in template "
+                f"{parser.name or parser.filename or '<string>'!r}: first declared "
+                f"at line {declarations[name]}, declared again at line {lineno}",
                 lineno,
                 parser.name,
                 parser.filename,
@@ -74,8 +72,13 @@ class ScriptBlockExtension(Extension):
         try:
             compile_script(source, filename)
         except SyntaxError as error:
+            column = f", column {error.offset}" if error.offset else ""
             raise ScriptSyntaxError(
-                error.msg, error.lineno or lineno, parser.name, parser.filename
+                f"Invalid Python in script {name!r}: {error.msg} "
+                f"(template line {error.lineno or lineno}{column})",
+                error.lineno or lineno,
+                parser.name,
+                parser.filename,
             ) from error
         context_names = referenced_context_names(source, filename)
         assignment = nodes.Assign(

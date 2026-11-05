@@ -28,6 +28,12 @@ _DEPRECATED = {
 }
 
 
+_USE = {
+    "ScriptNameError": "raised for missing, invalid, or duplicate script names",
+    "ScriptSyntaxError": "raised for invalid Python inside a script block",
+}
+
+
 def deprecated_error(name: str) -> Any:
     """Resolve a pre-0.1.0 exception name, warning about its replacement."""
     try:
@@ -35,7 +41,9 @@ def deprecated_error(name: str) -> Any:
     except KeyError:
         raise AttributeError(name) from None
     warnings.warn(
-        f"{name} is deprecated; use {replacement.__name__} instead.",
+        f"{name} is deprecated since jinja-script-block 0.1.0 and will be "
+        f"removed in a future release; use jinja_script_block."
+        f"{replacement.__name__} instead ({_USE[replacement.__name__]}).",
         DeprecationWarning,
         stacklevel=3,
     )

@@ -195,3 +195,82 @@ class SourceTests(unittest.TestCase):
         for name in ["true", "false", "none"]:
             with self.subTest(name=name), self.assertRaises(TemplateSyntaxError):
                 self.env.from_string("{% script " + name + " %}\nx=1\n{% endscript %}")
+
+
+class ErrorMessageTests(unittest.TestCase):
+    def setUp(self):
+        self.env = Environment(extensions=[ScriptBlockExtension])
+
+    def compile_error(self, source, **kwargs):
+        with self.assertRaises(ScriptBlockError) as raised:
+            self.env.compile(source, name="page.html", **kwargs)
+        return raised.exception
+
+    def test_invalid_name_message_gives_reason_and_location(self):
+        for name, reason in [
+            ("_x", "underscore"),
+            ("class", "reserved"),
+            ("a.b", "identifier"),
+            ("42", "identifier"),
+        ]:
+            with self.subTest(name=name):
+                error = self.compile_error(
+                    "a\n{% script " + name + " %}x=1{% endscript %}"
+                )
+                self.assertIsInstance(error, ScriptNameError)
+                self.assertIn(repr(name), error.message)
+                self.assertIn(reason, error.message)
+                self.assertEqual((error.lineno, error.name), (2, "page.html"))
+
+    def test_extra_name_tokens(self):
+        error = self.compile_error("{% script a b %}x=1{% endscript %}")
+        self.assertIsInstance(error, ScriptNameError)
+        self.assertIn("a b", error.message)
+
+    def test_duplicate_message_names_template_and_both_lines(self):
+        error = self.compile_error(
+            "{% script x %}1{% endscript %}\n\n{% script x %}2{% endscript %}"
+        )
+        self.assertIsInstance(error, ScriptNameError)
+        self.assertEqual(error.lineno, 3)
+        for text in ["'x'", "page.html", "first declared at line 1", "line 3"]:
+            self.assertIn(text, error.message)
+
+    def test_python_syntax_error_uses_template_line_and_script_name(self):
+        error = self.compile_error(
+            "a\nb\n{% script bad %}\n    x = 1\n    if x:\n    y = 2\n{% endscript %}"
+        )
+        self.assertIsInstance(error, ScriptSyntaxError)
+        self.assertEqual((error.lineno, error.name), (6, "page.html"))
+        self.assertIn("'bad'", error.message)
+        self.assertIn("template line 6", error.message)
+
+    def test_unterminated_script(self):
+        error = self.compile_error("a\n{% script x %}\nx = 1")
+        self.assertIs(type(error), ScriptBlockError)
+        self.assertEqual((error.lineno, error.name), (2, "page.html"))
+        self.assertIn("'x'", error.message)
+        self.assertIn("endscript", error.message)
+
+    def test_stray_endscript(self):
+        error = self.compile_error("a\n\n{% endscript %}")
+        self.assertIs(type(error), ScriptBlockError)
+        self.assertEqual(error.lineno, 3)
+        self.assertIn("endscript", error.message)
+
+    def test_endscript_text_in_raw_is_not_stray(self):
+        source = "{% raw %}{% endscript %}{% endraw %}"
+        self.assertEqual(self.env.from_string(source).render(), "{% endscript %}")
+
+    def test_deprecated_messages_name_replacement(self):
+        for old, new in [
+            ("NoModuleNameDefined", "ScriptNameError"),
+            ("NoInternalJinjaAccepted", "ScriptSyntaxError"),
+            ("CompileError", "ScriptSyntaxError"),
+        ]:
+            with self.subTest(old=old), self.assertWarns(DeprecationWarning) as caught:
+                getattr(jinja_script_block, old)
+            message = str(caught.warning)
+            self.assertIn(old, message)
+            self.assertIn("jinja_script_block." + new, message)
+            self.assertIn("0.1.0", message)
