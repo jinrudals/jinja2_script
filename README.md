@@ -136,9 +136,9 @@ This integration depends on Jinja 3.1's `_get_default_module`, `_get_default_mod
 
 ## Errors and trusted code
 
-Invalid Python, missing names, duplicate declarations, and malformed blocks fail at template compilation with a template name and line. Runtime exceptions occur during rendering or import execution, retaining their Python exception type and source location.
+Invalid Python, missing names, duplicate declarations, and malformed blocks fail at template compilation with a template name and line. Runtime exceptions occur during rendering or import execution, retaining their Python exception type. Tracebacks point at the template name and the line of the failing statement inside the template, because script code is compiled with the template's name and line offset.
 
-All compile-time errors derive from `ScriptBlockError`, itself a `jinja2.TemplateSyntaxError`: `ScriptNameError` for missing, invalid, or duplicate names and `ScriptSyntaxError` for invalid Python. The pre-0.1 names `NoModuleNameDefined`, `NoInternalJinjaAccepted`, and `CompileError` still import but emit a `DeprecationWarning`.
+All compile-time errors derive from `ScriptBlockError`, itself a `jinja2.TemplateSyntaxError`: `ScriptNameError` for missing, invalid, or duplicate names and `ScriptSyntaxError` for invalid Python (reported at the template line, not the script-relative line). Unterminated or stray `{% endscript %}` raises the base `ScriptBlockError`. The pre-0.1 names `NoModuleNameDefined`, `NoInternalJinjaAccepted`, and `CompileError` still import but emit a `DeprecationWarning`.
 
 Script blocks execute arbitrary trusted Python. They are not a sandbox, and Jinja's `SandboxedEnvironment` does not restrict them. Python `await` syntax inside script blocks is unsupported; use ordinary synchronous scripts even with Jinja's `render_async()`.
 

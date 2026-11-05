@@ -2,14 +2,15 @@
 
 import base64
 import json
+import keyword
 import re
 import symtable
 import textwrap
 
-from jinja2 import Environment, TemplateSyntaxError
+from jinja2 import Environment
 from jinja2.lexer import compile_rules
 
-from .errors import ScriptNameError
+from .errors import ScriptBlockError, ScriptNameError
 
 
 def _tag_end(source: str, start: int, delimiter: str) -> int:
@@ -35,6 +36,17 @@ def _tag_end(source: str, start: int, delimiter: str) -> int:
                 brackets.pop()
         i += 1
     return -1
+
+
+def invalid_name_reason(name: str) -> str | None:
+    """Explain why a script namespace name is not allowed, or return None."""
+    if not name.isidentifier():
+        return "it is not a valid Python identifier"
+    if keyword.iskeyword(name) or name in {"true", "false", "none"}:
+        return "it is a reserved word"
+    if name.startswith("_"):
+        return "names starting with an underscore are private"
+    return None
 
 
 def prepare_python(source: str, first_lineno: int) -> str:
@@ -116,16 +128,36 @@ def rewrite_script_blocks(
             lineno = source.count("\n", 0, pos) + 1
             if len(words) == 1:
                 raise ScriptNameError(
-                    "A script block requires a namespace name", lineno, name, filename
+                    "A script block requires a namespace name, "
+                    "e.g. {% script config %}...{% endscript %}",
+                    lineno,
+                    name,
+                    filename,
                 )
             if len(words) != 2:
-                raise TemplateSyntaxError(
-                    "Expected one script namespace name", lineno, name, filename
+                raise ScriptNameError(
+                    f"Expected exactly one script namespace name, got "
+                    f"{len(words) - 1}: {' '.join(words[1:])!r}",
+                    lineno,
+                    name,
+                    filename,
+                )
+            reason = invalid_name_reason(words[1])
+            if reason:
+                raise ScriptNameError(
+                    f"Invalid script namespace name {words[1]!r}: {reason}",
+                    lineno,
+                    name,
+                    filename,
                 )
             close = close_script.search(source, after)
             if close is None:
-                raise TemplateSyntaxError(
-                    "Missing endscript tag", lineno, name, filename
+                raise ScriptBlockError(
+                    f"Unterminated script block {words[1]!r} opened at line "
+                    f"{lineno}: missing {block_start} endscript {block_end}",
+                    lineno,
+                    name,
+                    filename,
                 )
             first_lineno = source.count("\n", 0, after) + 1
             body = source[after : close.start()]
@@ -147,6 +179,14 @@ def rewrite_script_blocks(
             )
             cursor = close.end()
             continue
+        elif kind == "block_begin" and words == ["endscript"]:
+            raise ScriptBlockError(
+                f"Unexpected {block_start} endscript {block_end} without a "
+                f"matching {block_start} script name {block_end}",
+                source.count("\n", 0, pos) + 1,
+                name,
+                filename,
+            )
         chunks.append(source[pos:after])
         cursor = after
     return "".join(chunks)

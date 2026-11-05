@@ -172,3 +172,76 @@ class RuntimeTests(unittest.TestCase):
             extensions=[ScriptBlockExtension],
         )
         self.assertEqual(env.get_template("child").render(), "base5")
+
+    def test_loop_namespace_is_not_exported_and_state_resets_each_iteration(self):
+        t = self.env.from_string(
+            "{% for i in [1, 2, 3] %}{% script s %}\nitems = []\nitems.append(i)\n{% endscript %}"
+            "{{ s.items }}{% endfor %}|{{ s is defined }}"
+        )
+        self.assertEqual(t.render(), "[1][2][3]|False")
+
+    def test_script_in_untaken_loop_never_runs(self):
+        t = self.env.from_string(
+            "{% for i in [] %}{% script s %}\nraise RuntimeError\n{% endscript %}{% endfor %}ok"
+        )
+        self.assertEqual(t.render(), "ok")
+
+    def test_conditional_script_is_undefined_when_skipped(self):
+        t = self.env.from_string(
+            "{% if on %}{% script s %}\nx=1\n{% endscript %}{% endif %}{{ s is defined }}"
+        )
+        self.assertEqual([t.render(on=True), t.render(on=False)], ["True", "False"])
+
+    def test_macro_local_script_is_not_global(self):
+        t = self.env.from_string(
+            "{% macro m(v) %}{% script s %}\nx = v * 2\n{% endscript %}{{ s.x }}{% endmacro %}"
+            "{{ m(2) }}{{ m(5) }}|{{ s is defined }}"
+        )
+        self.assertEqual(t.render(), "410|False")
+
+    def test_block_local_script_is_not_visible_outside_block(self):
+        t = self.env.from_string(
+            "{% block b %}{% script s %}\nx=1\n{% endscript %}{{ s.x }}{% endblock %}|{{ s is defined }}"
+        )
+        self.assertEqual(t.render(), "1|False")
+
+    def test_call_block_caller_is_available_to_python(self):
+        t = self.env.from_string(
+            "{% macro wrap() %}{% script s %}\ntext = caller()\n{% endscript %}[{{ s.text }}]{% endmacro %}"
+            "{% call wrap() %}body{% endcall %}"
+        )
+        self.assertEqual(t.render(), "[body]")
+
+    def test_python_reads_set_variables_visible_at_declaration(self):
+        t = self.env.from_string(
+            "{% set a = 3 %}{% script s %}\nvalue = a + 1\n{% endscript %}{% set a = 10 %}{{ s.value }}"
+        )
+        self.assertEqual(t.render(), "4")
+
+    def test_context_snapshot_is_shallow(self):
+        shared = []
+        self.env.from_string(
+            "{% script s %}\nshared.append(1)\n{% endscript %}"
+        ).render(shared=shared)
+        self.assertEqual(shared, [1])
+
+    def test_script_name_shadows_render_input_after_declaration(self):
+        t = self.env.from_string(
+            "{{ s }}|{% script s %}\nx=1\n{% endscript %}{{ s.x }}"
+        )
+        self.assertEqual(t.render(s="input"), "input|1")
+
+    def test_python_module_level_def_closes_over_script_globals(self):
+        t = self.env.from_string(
+            "{% script s %}\ncounter = 0\ndef bump():\n    global counter\n    counter += 1\n    return counter\n{% endscript %}"
+            "{{ s.bump() }}{{ s.bump() }}"
+        )
+        self.assertEqual([t.render(), t.render()], ["12", "12"])
+
+    def test_runtime_exception_type_is_preserved_through_include(self):
+        e = Environment(
+            loader=DictLoader({"inc": "{% script s %}\n1/0\n{% endscript %}"}),
+            extensions=[ScriptBlockExtension],
+        )
+        with self.assertRaises(ZeroDivisionError):
+            e.from_string('{% include "inc" %}').render()

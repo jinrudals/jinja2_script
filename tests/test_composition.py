@@ -103,3 +103,53 @@ class CompositionTests(unittest.TestCase):
         self.assertEqual(
             e.from_string("{% script s %}\nx=1\n{% endscript %}{{ s.x }}").render(), "1"
         )
+
+    def test_include_does_not_export_script_names_to_caller(self):
+        e = self.environment(
+            {
+                "card": "{% script helpers %}\nx=1\n{% endscript %}",
+                "page": '{% include "card" %}{{ helpers is defined }}',
+            }
+        )
+        self.assertEqual(e.get_template("page").render(), "False")
+
+    def test_include_executes_script_with_context_only_when_allowed(self):
+        e = self.environment(
+            {
+                "card": "{% script s %}\nv = who\n{% endscript %}{{ s.v }}",
+                "with": '{% include "card" %}',
+                "without": '{% include "card" without context %}',
+            }
+        )
+        self.assertEqual(e.get_template("with").render(who="me"), "me")
+        with self.assertRaises(NameError):
+            e.get_template("without").render(who="me")
+
+    def test_same_script_name_in_parent_and_child_blocks(self):
+        e = self.environment(
+            {
+                "base": '{% block a %}{% script s %}\nv="base"\n{% endscript %}{{ s.v }}{% endblock %}{% block b %}{% script s2 %}\nv="b"\n{% endscript %}{{ s2.v }}{% endblock %}',
+                "child": '{% extends "base" %}{% block a %}{% script s %}\nv="child"\n{% endscript %}{{ s.v }}{% endblock %}',
+            }
+        )
+        self.assertEqual(e.get_template("child").render(), "childb")
+
+    def test_script_in_child_outside_blocks_runs_before_parent_blocks(self):
+        events = []
+        e = self.environment(
+            {
+                "base": "{% block a %}x{% endblock %}",
+                "child": '{% extends "base" %}{% script s %}\nevents.append("child")\n{% endscript %}',
+            }
+        )
+        e.get_template("child").render(events=events)
+        self.assertEqual(events, ["child"])
+
+    def test_duplicate_names_are_validated_per_source_template_across_extends(self):
+        e = self.environment(
+            {
+                "base": "{% script s %}x=1{% endscript %}{% block a %}{% endblock %}",
+                "child": '{% extends "base" %}{% block a %}{% script s %}x=2{% endscript %}{% endblock %}',
+            }
+        )
+        self.assertEqual(e.get_template("child").render(), "")
